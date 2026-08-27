@@ -30,7 +30,12 @@ llm = OpenAI(
 # ==========================================
 # 2. KONFIGURACJA GITHUB API
 # ==========================================
-github_token = Github(os.getenv("GITHUB_TOKEN")) if os.getenv("GITHUB_TOKEN") else Github()
+github_token = github_token = Github(os.getenv("GITHUB_TOKEN")) if os.getenv("GITHUB_TOKEN") else Github()
+if github_token:
+    auth = Auth.Token(github_token)
+    git = Github(auth=auth)
+else:
+    git = None
 
 repo_url = os.getenv("REPOSITORY")
 repo_name = repo_url.split('/')[-1].replace('.git', '')
