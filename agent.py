@@ -156,9 +156,10 @@ context_agent = FunctionAgent(
 # --- Agent 2: CommentorAgent ---
 system_prompt_commentor = """You are the Commentor Agent. Follow these steps exactly:
 Step 1: Immediately use the `handoff` tool (to_agent="ContextAgent", reason="Need PR context") to gather data.
-Step 2: Once the ContextAgent returns control, write a ~200-word review in markdown.
+Step 2: Once the ContextAgent returns control, write a ~100-word review in markdown.
+STEPS 3 AND 4 ARE VERY IMPORTANT:
 Step 3: Use the `add_comment_to_state` tool to save your drafted review.
-Step 4: Use the `handoff` tool (to_agent="ReviewAndPostingAgent", reason="Review drafted") to return control."""
+Step 4: After writing a review ALWAYS Use the `handoff` tool (to_agent="ReviewAndPostingAgent", reason="Review drafted") to return control."""
 
 commentor_agent = FunctionAgent(
     llm=llm,
