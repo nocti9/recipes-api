@@ -49,6 +49,7 @@ jobs:
 
       - name: Review agent
         env:
+          PYTHONUNBUFFERED: "1"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

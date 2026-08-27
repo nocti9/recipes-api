@@ -42,7 +42,11 @@ else:
 
 full_repo_name = os.getenv("REPOSITORY")
 
-pr_number = os.getenv("PR_NUMBER")
+# Bezpieczne rzutowanie PR_NUMBER na integer
+pr_number_str = os.getenv("PR_NUMBER")
+if not pr_number_str:
+    raise ValueError("Brak zmiennej PR_NUMBER w środowisku")
+pr_number = int(pr_number_str)
 
 if git is not None:
     repo = git.get_repo(full_repo_name)
@@ -90,7 +94,6 @@ def get_commit_details(commit_sha: str) -> list:
     return changed_files
 
 
-# --- NOWE NARZĘDZIE: Postowanie do GitHuba ---
 def post_review_to_github(pr_number: int, comment: str) -> str:
     """Use this tool to post the final review comment to GitHub PR."""
     pull_request = repo.get_pull(pr_number)
@@ -101,6 +104,16 @@ def post_review_to_github(pr_number: int, comment: str) -> str:
 # ==========================================
 # 4. ZARZĄDZANIE STANEM (STATE MANAGEMENT)
 # ==========================================
+
+# --- NOWE NARZĘDZIE: Odczyt stanu ---
+async def get_state(ctx: Context) -> dict:
+    """Useful for checking the current state variables like drafted reviews or gathered context."""
+    if hasattr(ctx, "session") and hasattr(ctx.session, "state"):
+        return ctx.session.state
+    elif hasattr(ctx, "data"):
+        return ctx.data
+    return {}
+
 async def add_context_to_state(ctx: Context, gathered_contexts: str) -> str:
     """Useful for adding the gathered context to the state."""
     if hasattr(ctx, "session") and hasattr(ctx.session, "state"):
@@ -131,6 +144,7 @@ file_tool = FunctionTool.from_defaults(get_file_content)
 pr_commits_tool = FunctionTool.from_defaults(get_commit_details)
 post_review_tool = FunctionTool.from_defaults(post_review_to_github)
 
+get_state_tool = FunctionTool.from_defaults(get_state)
 context_state_tool = FunctionTool.from_defaults(add_context_to_state)
 comment_state_tool = FunctionTool.from_defaults(add_comment_to_state)
 final_review_state_tool = FunctionTool.from_defaults(add_final_review_to_state)
@@ -146,48 +160,47 @@ system_prompt_context = """You are the context gathering agent. You have strictl
 3. Fetch any requested files using `get_file_content`.
 4. You MUST save the gathered context using the `add_context_to_state` tool.
 5. After saving the context, you MUST use the `handoff` tool to pass control back to `CommentorAgent`.
-CRITICAL: DO NOT generate a conversational response. ONLY use tools."""
+Always use the provided tools to accomplish your task."""
 
 context_agent = FunctionAgent(
     llm=llm,
     name="ContextAgent",
     description="Gathers all the needed context from the GitHub repository and saves it to state.",
-    tools=[pr_details_tool, file_tool, pr_commits_tool, context_state_tool],
+    tools=[pr_details_tool, file_tool, pr_commits_tool, context_state_tool, get_state_tool],
     system_prompt=system_prompt_context,
     can_handoff_to=["CommentorAgent"]
 )
 
 # --- Agent 2: CommentorAgent ---
 system_prompt_commentor = """You are the commentor agent. Follow these exact steps:
-1. If you don't have PR context yet, use the `handoff` tool to pass control to `ContextAgent`.
-2. Once you have the context, draft a ~200-300 word review in markdown (mention tests, endpoints, code improvements, and address the author).
-3. CRITICAL: YOU MUST NOT output the review directly to the user!
-4. You MUST first save your draft using the `add_comment_to_state` tool.
-5. Immediately after saving, you MUST use the `handoff` tool to pass control to `ReviewAndPostingAgent`.
-DO NOT answer directly, always use the tools!"""
+1. Use the `get_state` tool to check if `gathered_contexts` is present in the state.
+2. If you don't have PR context yet, use the `handoff` tool to pass control to `ContextAgent`.
+3. Once you have the context, draft a ~200-300 word review in markdown (mention tests, endpoints, code improvements, and address the author).
+4. Save your draft using the `add_comment_to_state` tool.
+5. Immediately after saving, use the `handoff` tool to pass control to `ReviewAndPostingAgent`.
+Always use the tools!"""
 
 commentor_agent = FunctionAgent(
     llm=llm,
     name="CommentorAgent",
     description="Uses the context gathered by the context agent to draft a pull review comment.",
-    tools=[comment_state_tool],
+    tools=[comment_state_tool, get_state_tool],
     system_prompt=system_prompt_commentor,
     can_handoff_to=["ContextAgent", "ReviewAndPostingAgent"]
 )
 
 # --- Agent 3: ReviewAndPostingAgent ---
-system_prompt_review_posting = """You are the Review and Posting agent.
-1. If there is no drafted review in the state, use the `handoff` tool to pass control to `CommentorAgent`.
-2. Once CommentorAgent hands off the draft to you, verify it.
-3. Save the final review using the `add_final_review_to_state` tool.
-4. Finally, post the review to GitHub using the `post_review_to_github` tool.
-CRITICAL: Do not output any text until the review is successfully posted via the tool."""
+system_prompt_review_posting = """You are the Review and Posting agent. Follow these steps carefully:
+1. Use the `get_state` tool to check if a `review_comment` has been drafted.
+2. If there is no drafted review in the state, use the `handoff` tool to pass control to `CommentorAgent`.
+3. Once you have verified the drafted review from the state, save the final version using the `add_final_review_to_state` tool.
+4. Finally, post the review to GitHub using the `post_review_to_github` tool."""
 
 review_and_posting_agent = FunctionAgent(
     llm=llm,
     name="ReviewAndPostingAgent",
     description="Reviews the drafted PR comment, ensures it meets criteria, and posts it to GitHub.",
-    tools=[post_review_tool, final_review_state_tool],
+    tools=[post_review_tool, final_review_state_tool, get_state_tool],
     system_prompt=system_prompt_review_posting,
     can_handoff_to=["CommentorAgent"]
 )
@@ -207,8 +220,8 @@ workflow_agent = AgentWorkflow(
 # 6. GŁÓWNA PĘTLA WYKONAWCZA (STREAMING WORKFLOW)
 # ==========================================
 async def main():
-    # print("Workflow gotowe! Wpisz zapytanie:")
-    query = "Write a review for PR: " + pr_number
+    # Zmiana z dodawania integera do stringa na formatowanie (f-string)
+    query = f"Write a review for PR: {pr_number}"
     prompt = RichPromptTemplate(query)
 
     handler = workflow_agent.run(prompt.format())
