@@ -154,12 +154,15 @@ context_agent = FunctionAgent(
 )
 
 # --- Agent 2: CommentorAgent ---
-system_prompt_commentor = """You are the Commentor Agent. Follow these steps exactly:
-Step 1: Immediately use the `handoff` tool (to_agent="ContextAgent", reason="Need PR context") to gather data.
-Step 2: Once the ContextAgent returns control, write a ~100-word review in markdown.
-STEPS 3 AND 4 ARE VERY IMPORTANT:
-Step 3: Use the `add_comment_to_state` tool to save your drafted review.
-Step 4: After writing a review ALWAYS Use the `handoff` tool (to_agent="ReviewAndPostingAgent", reason="Review drafted") to return control."""
+system_prompt_commentor = """You are the Commentor Agent. You operate strictly as a background processor.
+Your final output MUST be a tool call. If you output a standard text response, the system will crash.
+
+Follow this exact sequence:
+1. If you lack PR context, use the `handoff` tool (to_agent="ContextAgent", reason="Need context").
+2. Once ContextAgent returns the data, formulate a ~100-word markdown review SILENTLY in your processing.
+3. IMMEDIATELY pass that drafted review as the argument to the `add_comment_to_state` tool. 
+4. Immediately after the tool confirms the state is saved, you MUST use the `handoff` tool (to_agent="ReviewAndPostingAgent", reason="Review drafted").
+"""
 
 commentor_agent = FunctionAgent(
     llm=llm,
