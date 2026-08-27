@@ -92,8 +92,10 @@ def get_commit_details(commit_sha: str) -> list:
 # --- NOWE NARZĘDZIE: Postowanie do GitHuba ---
 def post_review_to_github(pr_number: int, comment: str) -> str:
     """Use this tool to post the final review comment to GitHub PR."""
-    pull_request = repo.get_pull(pr_number)
-    pull_request.create_review(body=comment)
+    # Upewniamy się, że pr_number to liczba całkowita
+    pull_request = repo.get_pull(int(pr_number))
+    # Dodajemy event="COMMENT", aby recenzja natychmiast stała się publiczna!
+    pull_request.create_review(body=comment, event="COMMENT")
     return f"Review successfully posted to GitHub PR #{pr_number}."
 
 
