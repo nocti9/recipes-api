@@ -30,11 +30,23 @@ llm = OpenAI(
 # ==========================================
 # 2. KONFIGURACJA GITHUB API
 # ==========================================
-github_token = github_token = Github(os.getenv("GITHUB_TOKEN")) if os.getenv("GITHUB_TOKEN") else Github()
-repo_url = os.getenv("REPOSITORY")
+github_token = Github(os.getenv("GITHUB_TOKEN")) if os.getenv("GITHUB_TOKEN") else Github()
+
+# Inicjalizacja klienta 'git'
+if github_token:
+    git = Github(auth=Auth.Token(github_token))
+else:
+    git = Github()
+
+# Pobieranie zmiennych repozytorium
+full_repo_name = os.getenv("REPOSITORY")
 pr_number = os.getenv("PR_NUMBER")
 
-
+# Inicjalizacja obiektu 'repo', bez którego nie zadziałają narzędzia!
+if git is not None and full_repo_name:
+    repo = git.get_repo(full_repo_name)
+else:
+    raise ValueError("Brak zmiennej REPOSITORY w środowisku!")
 # ==========================================
 # 3. DEFINICJE NARZĘDZI (TOOLS) - GitHub
 # ==========================================
