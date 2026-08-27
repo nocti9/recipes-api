@@ -139,13 +139,10 @@ final_review_state_tool = FunctionTool.from_defaults(add_final_review_to_state)
 # ==========================================
 
 # --- Agent 1: ContextAgent ---
-system_prompt_context = """You are the context gathering agent. You have strictly defined steps:
-1. Fetch PR details using `get_pr_details`.
-2. Fetch changed files using `get_commit_details`.
-3. Fetch any requested files using `get_file_content`.
-4. You MUST save the gathered context using the `add_context_to_state` tool.
-5. After saving the context, you MUST use the `handoff` tool to pass control back to `CommentorAgent`.
-CRITICAL: DO NOT generate a conversational response. ONLY use tools."""
+system_prompt_context = """You are the Context Agent. Follow these steps exactly:
+Step 1: Use the `get_pr_details` and `get_commit_details` tools to fetch repository data.
+Step 2: Use the `add_context_to_state` tool to save the gathered data.
+Step 3: Use the `handoff` tool (to_agent="CommentorAgent", reason="Context gathered") to return control."""
 
 context_agent = FunctionAgent(
     llm=llm,
@@ -157,13 +154,11 @@ context_agent = FunctionAgent(
 )
 
 # --- Agent 2: CommentorAgent ---
-system_prompt_commentor = """You are the commentor agent. Follow these exact steps:
-1. If you don't have PR context yet, use the `handoff` tool to pass control to `ContextAgent`.
-2. Once you have the context, draft a ~200-300 word review in markdown (mention tests, endpoints, code improvements, and address the author).
-3. CRITICAL: YOU MUST NOT output the review directly to the user!
-4. You MUST first save your draft using the `add_comment_to_state` tool.
-5. Immediately after saving, you MUST use the `handoff` tool to pass control to `ReviewAndPostingAgent`.
-DO NOT answer directly, always use the tools!"""
+system_prompt_commentor = """You are the Commentor Agent. Follow these steps exactly:
+Step 1: Immediately use the `handoff` tool (to_agent="ContextAgent", reason="Need PR context") to gather data.
+Step 2: Once the ContextAgent returns control, write a ~200-word review in markdown.
+Step 3: Use the `add_comment_to_state` tool to save your drafted review.
+Step 4: Use the `handoff` tool (to_agent="ReviewAndPostingAgent", reason="Review drafted") to return control."""
 
 commentor_agent = FunctionAgent(
     llm=llm,
@@ -175,12 +170,10 @@ commentor_agent = FunctionAgent(
 )
 
 # --- Agent 3: ReviewAndPostingAgent ---
-system_prompt_review_posting = """You are the Review and Posting agent.
-1. If there is no drafted review in the state, use the `handoff` tool to pass control to `CommentorAgent`.
-2. Once CommentorAgent hands off the draft to you, verify it.
-3. Save the final review using the `add_final_review_to_state` tool.
-4. Finally, post the review to GitHub using the `post_review_to_github` tool.
-CRITICAL: Do not output any text until the review is successfully posted via the tool."""
+system_prompt_review_posting = """You are the Review and Posting Agent orchestrator. Follow these steps exactly:
+Step 1: Immediately use the `handoff` tool (to_agent="CommentorAgent", reason="Need to draft a review") to start the process.
+Step 2: Once the CommentorAgent returns control with the drafted review, use the `post_review_to_github` tool to publish it.
+You MUST use the provided tools to complete your task."""
 
 review_and_posting_agent = FunctionAgent(
     llm=llm,
